@@ -39,6 +39,28 @@ export const STORAGE_AI_BASE_URL_KEY = "next-ai-draw-io-ai-base-url"
 export const STORAGE_AI_API_KEY_KEY = "next-ai-draw-io-ai-api-key"
 export const STORAGE_AI_MODEL_KEY = "next-ai-draw-io-ai-model"
 
+// Per-provider storage key helpers
+function getProviderStorageKey(baseKey: string, provider: string): string {
+    if (!provider) return baseKey
+    return `${baseKey}-${provider}`
+}
+
+function saveProviderSettings(provider: string, apiKey: string, modelId: string, baseUrl: string) {
+    if (!provider) return
+    localStorage.setItem(getProviderStorageKey(STORAGE_AI_API_KEY_KEY, provider), apiKey)
+    localStorage.setItem(getProviderStorageKey(STORAGE_AI_MODEL_KEY, provider), modelId)
+    localStorage.setItem(getProviderStorageKey(STORAGE_AI_BASE_URL_KEY, provider), baseUrl)
+}
+
+function loadProviderSettings(provider: string): { apiKey: string; modelId: string; baseUrl: string } {
+    if (!provider) return { apiKey: "", modelId: "", baseUrl: "" }
+    return {
+        apiKey: localStorage.getItem(getProviderStorageKey(STORAGE_AI_API_KEY_KEY, provider)) || "",
+        modelId: localStorage.getItem(getProviderStorageKey(STORAGE_AI_MODEL_KEY, provider)) || "",
+        baseUrl: localStorage.getItem(getProviderStorageKey(STORAGE_AI_BASE_URL_KEY, provider)) || "",
+    }
+}
+
 function getStoredAccessCodeRequired(): boolean | null {
     if (typeof window === "undefined") return null
     const stored = localStorage.getItem(STORAGE_ACCESS_CODE_REQUIRED_KEY)
@@ -103,10 +125,14 @@ export function SettingsDialog({
             setCloseProtection(storedCloseProtection !== "false")
 
             // Load AI provider settings
-            setProvider(localStorage.getItem(STORAGE_AI_PROVIDER_KEY) || "")
-            setBaseUrl(localStorage.getItem(STORAGE_AI_BASE_URL_KEY) || "")
-            setApiKey(localStorage.getItem(STORAGE_AI_API_KEY_KEY) || "")
-            setModelId(localStorage.getItem(STORAGE_AI_MODEL_KEY) || "")
+            const savedProvider = localStorage.getItem(STORAGE_AI_PROVIDER_KEY) || ""
+            setProvider(savedProvider)
+
+            // Load provider-specific settings
+            const providerSettings = loadProviderSettings(savedProvider)
+            setApiKey(providerSettings.apiKey)
+            setModelId(providerSettings.modelId)
+            setBaseUrl(providerSettings.baseUrl)
 
             setError("")
         }
@@ -204,12 +230,25 @@ export function SettingsDialog({
                                 <Select
                                     value={provider || "default"}
                                     onValueChange={(value) => {
-                                        const actualValue =
+                                        const newProvider =
                                             value === "default" ? "" : value
-                                        setProvider(actualValue)
+
+                                        // Save current provider's settings before switching
+                                        if (provider) {
+                                            saveProviderSettings(provider, apiKey, modelId, baseUrl)
+                                        }
+
+                                        // Load new provider's saved settings
+                                        const newSettings = loadProviderSettings(newProvider)
+                                        setApiKey(newSettings.apiKey)
+                                        setModelId(newSettings.modelId)
+                                        setBaseUrl(newSettings.baseUrl)
+
+                                        // Update provider
+                                        setProvider(newProvider)
                                         localStorage.setItem(
                                             STORAGE_AI_PROVIDER_KEY,
-                                            actualValue,
+                                            newProvider,
                                         )
                                     }}
                                 >
@@ -256,7 +295,7 @@ export function SettingsDialog({
                                             onChange={(e) => {
                                                 setModelId(e.target.value)
                                                 localStorage.setItem(
-                                                    STORAGE_AI_MODEL_KEY,
+                                                    getProviderStorageKey(STORAGE_AI_MODEL_KEY, provider),
                                                     e.target.value,
                                                 )
                                             }}
@@ -285,7 +324,7 @@ export function SettingsDialog({
                                             onChange={(e) => {
                                                 setApiKey(e.target.value)
                                                 localStorage.setItem(
-                                                    STORAGE_AI_API_KEY_KEY,
+                                                    getProviderStorageKey(STORAGE_AI_API_KEY_KEY, provider),
                                                     e.target.value,
                                                 )
                                             }}
@@ -324,7 +363,7 @@ export function SettingsDialog({
                                             onChange={(e) => {
                                                 setBaseUrl(e.target.value)
                                                 localStorage.setItem(
-                                                    STORAGE_AI_BASE_URL_KEY,
+                                                    getProviderStorageKey(STORAGE_AI_BASE_URL_KEY, provider),
                                                     e.target.value,
                                                 )
                                             }}
@@ -342,17 +381,21 @@ export function SettingsDialog({
                                         size="sm"
                                         className="w-full"
                                         onClick={() => {
+                                            // Clear current provider's settings
+                                            if (provider) {
+                                                localStorage.removeItem(
+                                                    getProviderStorageKey(STORAGE_AI_API_KEY_KEY, provider),
+                                                )
+                                                localStorage.removeItem(
+                                                    getProviderStorageKey(STORAGE_AI_MODEL_KEY, provider),
+                                                )
+                                                localStorage.removeItem(
+                                                    getProviderStorageKey(STORAGE_AI_BASE_URL_KEY, provider),
+                                                )
+                                            }
+                                            // Reset to server default
                                             localStorage.removeItem(
                                                 STORAGE_AI_PROVIDER_KEY,
-                                            )
-                                            localStorage.removeItem(
-                                                STORAGE_AI_BASE_URL_KEY,
-                                            )
-                                            localStorage.removeItem(
-                                                STORAGE_AI_API_KEY_KEY,
-                                            )
-                                            localStorage.removeItem(
-                                                STORAGE_AI_MODEL_KEY,
                                             )
                                             setProvider("")
                                             setBaseUrl("")
@@ -360,7 +403,7 @@ export function SettingsDialog({
                                             setModelId("")
                                         }}
                                     >
-                                        Clear Settings
+                                        Clear Current Provider
                                     </Button>
                                 </>
                             )}
